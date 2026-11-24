@@ -64,7 +64,44 @@ def init_db():
 
 @app.route("/")
 def index():
-    return "Gestion de Veterinaria"
+    return """
+    <!doctype html>
+    <html lang="es">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Gestión de Veterinaria</title>
+    </head>
+    <body>
+        <h1>Gestión de Veterinaria</h1>
+        <p>Selecciona una opción:</p>
+        <ul>
+            <li><a href="/owners">Registrar dueño</a></li>
+            <li><a href="/pets">Registrar mascota</a></li>
+            <li><a href="/appointments/new">Agendar cita</a></li>
+            <li><a href="/appointments">Consultar citas</a></li>
+        </ul>
+    </body>
+    </html>
+    """
+
+
+@app.route("/owners")
+@app.route("/pets")
+@app.route("/appointments/new")
+@app.route("/appointments")
+def feature_in_progress():
+    return """
+    <!doctype html>
+    <html lang="es">
+    <head><meta charset="utf-8"><title>Módulo en desarrollo</title></head>
+    <body>
+        <h1>Módulo en desarrollo</h1>
+        <p>Esta función todavía no está implementada.</p>
+        <a href="/">Volver al inicio</a>
+    </body>
+    </html>
+    """
 
 
 init_db()
