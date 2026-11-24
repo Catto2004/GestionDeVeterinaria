@@ -221,3 +221,27 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Entornos Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+
+# Entorno local
+.env
+instance/
+
+# Bases de datos locales
+*.db
+*.sqlite
+*.sqlite3
+
+# Pruebas y cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editores
+.vscode/
+.idea/
