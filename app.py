@@ -56,35 +56,295 @@ LAYOUT = """
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title }} - Gestión de Veterinaria</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --primary: #365da8;
+            --primary-dark: #24477f;
+            --primary-soft: #e8efff;
+            --background: #f5f7fb;
+            --surface: #ffffff;
+            --text: #20232a;
+            --muted: #687386;
+            --outline: #dce2eb;
+            --warning: #fff3cd;
+            --error: #b3261e;
+        }
+        * { box-sizing: border-box; }
+        body {
+            min-height: 100vh;
+            margin: 0;
+            background: var(--background);
+            color: var(--text);
+            font-family: "Segoe UI", Roboto, Arial, sans-serif;
+        }
+        .site-header {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: var(--surface);
+            border-bottom: 1px solid var(--outline);
+            box-shadow: 0 2px 8px #20232a0d;
+        }
+        .header-inner, .page-shell, .site-footer {
+            width: min(1120px, calc(100% - 40px));
+            margin: 0 auto;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 0 12px;
+        }
+        .brand-mark {
+            display: grid;
+            width: 42px;
+            height: 42px;
+            place-items: center;
+            border-radius: 14px;
+            background: var(--primary-soft);
+            color: var(--primary);
+            font-size: 22px;
+        }
+        .brand h1 { margin: 0; font-size: 20px; font-weight: 650; }
+        .brand p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+        nav {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 5px;
+            padding: 0 0 12px;
+        }
+        .nav-group { position: relative; flex: 0 0 auto; }
+        .nav-group summary { list-style: none; cursor: pointer; }
+        .nav-group summary::-webkit-details-marker { display: none; }
+        .nav-dropdown {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            z-index: 8;
+            display: flex;
+            min-width: 220px;
+            flex-direction: column;
+            padding: 6px;
+            border: 1px solid var(--outline);
+            border-radius: 14px;
+            background: var(--surface);
+            box-shadow: 0 8px 24px #20232a1a;
+        }
+        .nav-group:last-child .nav-dropdown { right: 0; left: auto; }
+        .dropdown-link {
+            padding: 10px 12px;
+            border-radius: 9px;
+            color: #414855;
+            font-size: 13px;
+            text-decoration: none;
+        }
+        .dropdown-link:hover, .dropdown-link[aria-current="page"] {
+            background: var(--primary-soft);
+            color: var(--primary-dark);
+        }
+        .nav-link {
+            flex: 0 0 auto;
+            padding: 9px 12px;
+            border-radius: 999px;
+            color: #414855;
+            font-size: 13px;
+            text-decoration: none;
+            transition: background-color .15s ease, color .15s ease;
+        }
+        .nav-link:hover { background: #f0f3f8; }
+        .nav-link[aria-current="page"] {
+            background: var(--primary-soft);
+            color: var(--primary-dark);
+            font-weight: 600;
+        }
+        .page-shell { flex: 1; padding: 34px 0 48px; }
+        .page-heading { margin: 0 0 20px; }
+        .eyebrow {
+            color: var(--primary);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+        .page-heading h2 { margin: 5px 0 0; font-size: clamp(24px, 4vw, 32px); }
+        .content-panel {
+            min-width: 0;
+            overflow-x: auto;
+            padding: clamp(20px, 4vw, 32px);
+            border: 1px solid var(--outline);
+            border-radius: 20px;
+            background: var(--surface);
+            box-shadow: 0 4px 16px #20232a08;
+        }
+        h3 { margin: 28px 0 14px; font-size: 19px; }
+        p { line-height: 1.6; }
+        a { color: var(--primary-dark); }
+        .content-panel a { text-underline-offset: 3px; }
+        form { margin: 0 0 18px; }
+        label {
+            display: inline-flex;
+            flex-direction: column;
+            gap: 6px;
+            margin: 5px 12px 7px 0;
+            color: #444b57;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        input, select, textarea {
+            max-width: 100%;
+            min-height: 42px;
+            padding: 9px 12px;
+            border: 1px solid #c8d0dc;
+            border-radius: 10px;
+            background: #fff;
+            color: var(--text);
+            font: inherit;
+            font-weight: 400;
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--primary);
+            outline: 3px solid #365da826;
+        }
+        textarea { min-width: min(100%, 340px); min-height: 82px; resize: vertical; }
+        button {
+            min-height: 40px;
+            padding: 9px 17px;
+            border: 0;
+            border-radius: 999px;
+            background: var(--primary);
+            color: white;
+            cursor: pointer;
+            font: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background-color .15s ease, box-shadow .15s ease;
+        }
+        button:hover { background: var(--primary-dark); box-shadow: 0 2px 6px #20232a24; }
+        button:focus-visible { outline: 3px solid #365da866; outline-offset: 2px; }
+        button:disabled { background: #aab3c2; cursor: not-allowed; box-shadow: none; }
+        table {
+            width: 100%;
+            min-width: 100%;
+            border-collapse: collapse;
+            border: 1px solid var(--outline);
+            border-radius: 12px;
+            font-size: 14px;
+        }
+        th, td { padding: 12px 14px; border-bottom: 1px solid var(--outline); text-align: left; }
+        thead th { background: #f1f4f9; color: #414855; font-weight: 650; }
+        tbody tr:last-child td { border-bottom: 0; }
+        tbody tr:hover { background-color: #f8faff; }
+        [role="alert"] {
+            padding: 12px 14px;
+            border: 1px solid #f1b6b2;
+            border-radius: 12px;
+            background: #fcebea;
+            color: var(--error);
+        }
+        .stock-warning {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: var(--warning);
+            color: #704d00;
+            font-size: 12px;
+            font-weight: 650;
+        }
+        .stock-warning[role="alert"] { border: 0; background: var(--warning); color: #704d00; }
+        .home-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 14px;
+            padding: 0;
+            list-style: none;
+        }
+        .home-actions a {
+            display: block;
+            min-height: 104px;
+            padding: 18px;
+            border: 1px solid var(--outline);
+            border-radius: 16px;
+            color: var(--text);
+            text-decoration: none;
+            transition: border-color .15s ease, background-color .15s ease, transform .15s ease;
+        }
+        .home-actions a:hover {
+            transform: translateY(-2px);
+            border-color: #9db4e3;
+            background: #f8faff;
+        }
+        .home-actions strong { display: block; margin-bottom: 6px; color: var(--primary-dark); }
+        .home-actions span { color: var(--muted); font-size: 13px; }
+        .site-footer { padding: 0 0 24px; color: var(--muted); font-size: 12px; }
+        .cancel-form { margin: 8px 0 0; }
+        .cancel-form button { min-height: 32px; padding: 5px 11px; font-size: 12px; }
+        @media (max-width: 640px) {
+            .header-inner, .page-shell, .site-footer { width: min(100% - 24px, 1120px); }
+            .brand { padding-top: 14px; }
+            .brand h1 { font-size: 18px; }
+            .page-shell { padding-top: 24px; }
+            .content-panel { border-radius: 16px; }
+            .content-panel > form label { width: 100%; margin-right: 0; }
+            .content-panel > form input, .content-panel > form select,
+            .content-panel > form textarea { width: 100%; }
+        }
+    </style>
 </head>
 <body>
-    <header>
-        <h1>Gestión de Veterinaria</h1>
-        <nav>
-            <a href="{{ url_for('index') }}">Inicio</a> |
-            <a href="{{ url_for('owners') }}">Dueños</a> |
-            <a href="{{ url_for('pets') }}">Mascotas</a> |
-            <a href="{{ url_for('new_appointment') }}">Agendar cita</a> |
-            <a href="{{ url_for('schedule') }}">Agenda</a> |
-            <a href="{{ url_for('appointments') }}">Consultar citas</a> |
-            <a href="{{ url_for('veterinarians') }}">Veterinarios</a> |
-            <a href="{{ url_for('prescriptions') }}">Recetas</a> |
-            <a href="{{ url_for('inventory') }}">Inventario</a> |
-            <a href="{{ url_for('procedure_catalog') }}">Procedimientos</a> |
-            <a href="{{ url_for('new_procedure_record') }}">Registrar atención</a> |
-            <a href="{{ url_for('procedure_history') }}">Historial de procedimientos</a> |
-            {% if session.get('veterinarian_id') %}
-                <a href="{{ url_for('logout') }}">Cerrar sesión ({{ session.get('veterinarian_name') }})</a>
-            {% else %}
-                <a href="{{ url_for('login') }}">Acceso veterinario</a> |
-                <a href="{{ url_for('register_veterinarian_account') }}">Crear cuenta veterinaria</a>
-            {% endif %}
-        </nav>
+    <header class="site-header">
+        <div class="header-inner">
+            <div class="brand">
+                <span class="brand-mark" aria-hidden="true">🐾</span>
+                <div>
+                    <h1>Gestión de Veterinaria</h1>
+                    <p>Atención y cuidado animal</p>
+                </div>
+            </div>
+            <nav aria-label="Navegación principal">
+                <a class="nav-link" href="{{ url_for('index') }}" {% if request.endpoint == 'index' %}aria-current="page"{% endif %}>Inicio</a>
+                <a class="nav-link" href="{{ url_for('owners') }}" {% if request.endpoint == 'owners' %}aria-current="page"{% endif %}>Dueños</a>
+                <a class="nav-link" href="{{ url_for('pets') }}" {% if request.endpoint == 'pets' %}aria-current="page"{% endif %}>Mascotas</a>
+                <a class="nav-link" href="{{ url_for('schedule') }}" {% if request.endpoint in ('schedule', 'schedule_status') %}aria-current="page"{% endif %}>Agenda</a>
+                <a class="nav-link" href="{{ url_for('inventory') }}" {% if request.endpoint in ('inventory', 'restock_product') %}aria-current="page"{% endif %}>Inventario</a>
+                <details class="nav-group">
+                    <summary class="nav-link" {% if request.endpoint in ('new_appointment', 'appointments', 'prescriptions', 'new_prescription', 'prescription_pdf', 'procedure_catalog', 'new_procedure_record', 'procedure_history') %}aria-current="page"{% endif %}>Citas y atención</summary>
+                    <div class="nav-dropdown">
+                        <a class="dropdown-link" href="{{ url_for('new_appointment') }}" {% if request.endpoint == 'new_appointment' %}aria-current="page"{% endif %}>Agendar cita</a>
+                        <a class="dropdown-link" href="{{ url_for('appointments') }}" {% if request.endpoint == 'appointments' %}aria-current="page"{% endif %}>Consultar citas</a>
+                        <a class="dropdown-link" href="{{ url_for('procedure_catalog') }}" {% if request.endpoint == 'procedure_catalog' %}aria-current="page"{% endif %}>Procedimientos</a>
+                        <a class="dropdown-link" href="{{ url_for('new_procedure_record') }}" {% if request.endpoint == 'new_procedure_record' %}aria-current="page"{% endif %}>Registrar atención</a>
+                        <a class="dropdown-link" href="{{ url_for('procedure_history') }}" {% if request.endpoint == 'procedure_history' %}aria-current="page"{% endif %}>Historial de procedimientos</a>
+                        <a class="dropdown-link" href="{{ url_for('prescriptions') }}" {% if request.endpoint in ('prescriptions', 'new_prescription', 'prescription_pdf') %}aria-current="page"{% endif %}>Recetas</a>
+                    </div>
+                </details>
+                <details class="nav-group">
+                    <summary class="nav-link" {% if request.endpoint in ('veterinarians', 'login', 'logout', 'register_veterinarian_account') %}aria-current="page"{% endif %}>Administración</summary>
+                    <div class="nav-dropdown">
+                        <a class="dropdown-link" href="{{ url_for('veterinarians') }}" {% if request.endpoint == 'veterinarians' %}aria-current="page"{% endif %}>Veterinarios</a>
+                        {% if session.get('veterinarian_id') %}
+                            <a class="dropdown-link" href="{{ url_for('logout') }}">Cerrar sesión ({{ session.get('veterinarian_name') }})</a>
+                        {% else %}
+                            <a class="dropdown-link" href="{{ url_for('login') }}" {% if request.endpoint == 'login' %}aria-current="page"{% endif %}>Acceso veterinario</a>
+                            <a class="dropdown-link" href="{{ url_for('register_veterinarian_account') }}" {% if request.endpoint == 'register_veterinarian_account' %}aria-current="page"{% endif %}>Crear cuenta veterinaria</a>
+                        {% endif %}
+                    </div>
+                </details>
+            </nav>
+        </div>
     </header>
-    <main>
-        <h2>{{ title }}</h2>
-        {{ content }}
+    <main class="page-shell">
+        <div class="page-heading">
+            <span class="eyebrow">Centro veterinario</span>
+            <h2>{{ title }}</h2>
+        </div>
+        <section class="content-panel">
+            {{ content }}
+        </section>
     </main>
+    <footer class="site-footer">Gestión de Veterinaria · Atención cercana, cuidado responsable</footer>
 </body>
 </html>
 """
@@ -298,20 +558,20 @@ def index():
     return render_page(
         "Inicio",
         """
-        <p>Selecciona una opción para administrar la veterinaria:</p>
-        <ul>
-            <li><a href="{{ url_for('owners') }}">Registrar dueño</a></li>
-            <li><a href="{{ url_for('pets') }}">Registrar mascota</a></li>
-            <li><a href="{{ url_for('new_appointment') }}">Agendar cita</a></li>
-            <li><a href="{{ url_for('schedule') }}">Ver agenda de veterinarios</a></li>
-            <li><a href="{{ url_for('appointments') }}">Consultar citas</a></li>
-            <li><a href="{{ url_for('veterinarians') }}">Registrar veterinario</a></li>
-            <li><a href="{{ url_for('prescriptions') }}">Consultar recetas</a></li>
-            <li><a href="{{ url_for('register_veterinarian_account') }}">Crear cuenta veterinaria</a></li>
-            <li><a href="{{ url_for('inventory') }}">Inventario de insumos</a></li>
-            <li><a href="{{ url_for('procedure_catalog') }}">Catálogo de procedimientos</a></li>
-            <li><a href="{{ url_for('new_procedure_record') }}">Registrar procedimiento realizado</a></li>
-            <li><a href="{{ url_for('procedure_history') }}">Historial de procedimientos</a></li>
+        <p>Selecciona una opción para gestionar la atención y operación diaria:</p>
+        <ul class="home-actions">
+            <li><a href="{{ url_for('owners') }}"><strong>Registrar dueño</strong><span>Datos de contacto y clientes</span></a></li>
+            <li><a href="{{ url_for('pets') }}"><strong>Registrar mascota</strong><span>Ficha y antecedentes del paciente</span></a></li>
+            <li><a href="{{ url_for('new_appointment') }}"><strong>Agendar cita</strong><span>Reserva una atención</span></a></li>
+            <li><a href="{{ url_for('schedule') }}"><strong>Agenda veterinaria</strong><span>Consulta disponibilidad por horario</span></a></li>
+            <li><a href="{{ url_for('appointments') }}"><strong>Consultar citas</strong><span>Busca las citas de un cliente</span></a></li>
+            <li><a href="{{ url_for('veterinarians') }}"><strong>Registrar veterinario</strong><span>Administra el equipo médico</span></a></li>
+            <li><a href="{{ url_for('prescriptions') }}"><strong>Consultar recetas</strong><span>Revisa o descarga recetas</span></a></li>
+            <li><a href="{{ url_for('inventory') }}"><strong>Inventario de insumos</strong><span>Stock, precios y reposiciones</span></a></li>
+            <li><a href="{{ url_for('procedure_catalog') }}"><strong>Procedimientos</strong><span>Catálogo y tarifas</span></a></li>
+            <li><a href="{{ url_for('new_procedure_record') }}"><strong>Registrar atención</strong><span>Guarda el servicio e insumos usados</span></a></li>
+            <li><a href="{{ url_for('procedure_history') }}"><strong>Historial de procedimientos</strong><span>Consulta atenciones realizadas</span></a></li>
+            <li><a href="{{ url_for('register_veterinarian_account') }}"><strong>Cuenta veterinaria</strong><span>Configura acceso para el personal médico</span></a></li>
         </ul>
         """,
     )
@@ -568,7 +828,7 @@ def inventory():
                     <td>{{ product.category }}</td>
                     <td>{{ product.stock }}
                         {% if product.category == 'Medicamentos' and product.stock < 5 %}
-                            <strong role="alert">Stock bajo: menos de 5 unidades</strong>
+                            <strong class="stock-warning" role="alert">Stock bajo: menos de 5 unidades</strong>
                         {% endif %}
                     </td>
                     <td>{{ "%.2f"|format(product.unit_price) }}</td>

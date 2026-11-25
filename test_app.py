@@ -67,8 +67,8 @@ class VeterinaryAppTests(unittest.TestCase):
             "Consultar citas",
             "Registrar veterinario",
             "Inventario de insumos",
-            "Catálogo de procedimientos",
-            "Registrar procedimiento realizado",
+            "Procedimientos",
+            "Registrar atención",
         ):
             self.assertIn(label, response.get_data(as_text=True))
 
