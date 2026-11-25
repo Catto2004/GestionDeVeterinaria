@@ -66,6 +66,9 @@ class VeterinaryAppTests(unittest.TestCase):
             "Agendar cita",
             "Consultar citas",
             "Registrar veterinario",
+            "Inventario de insumos",
+            "Catálogo de procedimientos",
+            "Registrar procedimiento realizado",
         ):
             self.assertIn(label, response.get_data(as_text=True))
 
@@ -324,6 +327,24 @@ class VeterinaryAppTests(unittest.TestCase):
             self.client.get(f"/pets/{pet_id}/medical-records").get_data(as_text=True),
         )
 
+        with closing(sqlite3.connect(veterinary_app.DATABASE)) as connection:
+            service_id = connection.execute(
+                "SELECT id FROM services WHERE name = 'Vacunación'"
+            ).fetchone()[0]
+        self.client.post(
+            "/procedures/new",
+            data={
+                "pet_id": str(pet_id),
+                "veterinarian_id": str(veterinarian_id),
+                "service_id": str(service_id),
+                "performed_date": date.today().isoformat(),
+                "charged_price": "40",
+            },
+        )
+        clinical_history = self.client.get(f"/pets/{pet_id}/medical-records")
+        self.assertIn("Procedimientos realizados", clinical_history.get_data(as_text=True))
+        self.assertIn("Vacunación", clinical_history.get_data(as_text=True))
+
         prescription = self.client.post(
             "/prescriptions/new",
             data={
@@ -425,6 +446,201 @@ class VeterinaryAppTests(unittest.TestCase):
             "10 minutos antes",
         ):
             self.assertIn(expected, body)
+
+    def test_inventory_lists_products_warns_and_restock_updates(self):
+        created = self.client.post(
+            "/inventory",
+            data={
+                "name": "Antibiótico",
+                "category": "Medicamentos",
+                "stock": "4",
+                "unit_price": "12.5",
+            },
+            follow_redirects=True,
+        )
+        self.assertIn("Antibiótico", created.get_data(as_text=True))
+        self.assertIn("Stock bajo: menos de 5 unidades", created.get_data(as_text=True))
+
+        self.client.post(
+            "/inventory",
+            data={
+                "name": "Alimento",
+                "category": "Alimentos",
+                "stock": "1",
+                "unit_price": "3",
+            },
+        )
+        inventory = self.client.get("/inventory").get_data(as_text=True)
+        self.assertEqual(inventory.count("Stock bajo: menos de 5 unidades"), 1)
+
+        with closing(sqlite3.connect(veterinary_app.DATABASE)) as connection:
+            product_id = connection.execute(
+                "SELECT id FROM products WHERE name = 'Antibiótico'"
+            ).fetchone()[0]
+        restocked = self.client.post(
+            f"/inventory/{product_id}/restock",
+            data={"quantity": "3"},
+            follow_redirects=True,
+        )
+        self.assertIn(">7", restocked.get_data(as_text=True))
+        self.assertNotIn(
+            "Stock bajo: menos de 5 unidades", restocked.get_data(as_text=True)
+        )
+
+    def test_procedure_uses_variable_fee_and_deducts_inventory_atomically(self):
+        self.add_owner()
+        with closing(sqlite3.connect(veterinary_app.DATABASE)) as connection:
+            owner_id = connection.execute(
+                "SELECT id FROM owners WHERE document = '12345'"
+            ).fetchone()[0]
+        self.add_pet(owner_id)
+        self.add_veterinarian()
+        self.client.post(
+            "/inventory",
+            data={
+                "name": "Vacuna",
+                "category": "Medicamentos",
+                "stock": "3",
+                "unit_price": "25",
+            },
+        )
+        with closing(sqlite3.connect(veterinary_app.DATABASE)) as connection:
+            pet_id = connection.execute("SELECT id FROM pets").fetchone()[0]
+            veterinarian_id = connection.execute(
+                "SELECT id FROM veterinarians"
+            ).fetchone()[0]
+            service_id = connection.execute(
+                "SELECT id FROM services WHERE name = 'Consulta general'"
+            ).fetchone()[0]
+            product_id = connection.execute(
+                "SELECT id FROM products WHERE name = 'Vacuna'"
+            ).fetchone()[0]
+
+        catalog = self.client.get("/procedures").get_data(as_text=True)
+        self.assertIn("Consulta general", catalog)
+        self.assertIn("Tarifa variable", catalog)
+
+        procedure_data = {
+            "pet_id": str(pet_id),
+            "veterinarian_id": str(veterinarian_id),
+            "service_id": str(service_id),
+            "performed_date": date.today().isoformat(),
+            "charged_price": "80.50",
+            "notes": "Aplicación y seguimiento",
+            "product_id": str(product_id),
+            "quantity": "2",
+        }
+        saved = self.client.post(
+            "/procedures/new", data=procedure_data, follow_redirects=True
+        )
+        saved_html = saved.get_data(as_text=True)
+        self.assertIn("Atención registrada e inventario actualizado", saved_html)
+        self.assertIn("Consulta general", saved_html)
+        self.assertIn("Vacuna x2", saved_html)
+
+        with closing(sqlite3.connect(veterinary_app.DATABASE)) as connection:
+            stock = connection.execute(
+                "SELECT stock FROM products WHERE id = ?", (product_id,)
+            ).fetchone()[0]
+            charge = connection.execute(
+                "SELECT charged_price FROM procedure_records"
+            ).fetchone()[0]
+            used_quantity = connection.execute(
+                "SELECT quantity FROM procedure_products"
+            ).fetchone()[0]
+        self.assertEqual(stock, 1)
+        self.assertEqual(charge, 80.5)
+        self.assertEqual(used_quantity, 2)
+
+        procedure_data["quantity"] = "2"
+        rejected = self.client.post("/procedures/new", data=procedure_data)
+        self.assertIn("Stock insuficiente", rejected.get_data(as_text=True))
+        with closing(sqlite3.connect(veterinary_app.DATABASE)) as connection:
+            stock = connection.execute(
+                "SELECT stock FROM products WHERE id = ?", (product_id,)
+            ).fetchone()[0]
+            count = connection.execute(
+                "SELECT COUNT(*) FROM procedure_records"
+            ).fetchone()[0]
+        self.assertEqual(stock, 1)
+        self.assertEqual(count, 1)
+
+        self.client.post(
+            "/procedures",
+            data={"name": "Radiografía", "fixed_price": "75"},
+        )
+        with closing(sqlite3.connect(veterinary_app.DATABASE)) as connection:
+            fixed_service_id = connection.execute(
+                "SELECT id FROM services WHERE name = 'Radiografía'"
+            ).fetchone()[0]
+        self.client.post(
+            "/procedures/new",
+            data={
+                "pet_id": str(pet_id),
+                "veterinarian_id": str(veterinarian_id),
+                "service_id": str(fixed_service_id),
+                "performed_date": date.today().isoformat(),
+                "charged_price": "1",
+            },
+        )
+        with closing(sqlite3.connect(veterinary_app.DATABASE)) as connection:
+            fixed_charge = connection.execute(
+                """
+                SELECT charged_price FROM procedure_records
+                WHERE service_id = ?
+                """,
+                (fixed_service_id,),
+            ).fetchone()[0]
+        self.assertEqual(fixed_charge, 75)
+
+    def test_completed_appointment_is_linked_to_the_procedure_history(self):
+        self.add_owner()
+        with closing(sqlite3.connect(veterinary_app.DATABASE)) as connection:
+            owner_id = connection.execute(
+                "SELECT id FROM owners WHERE document = '12345'"
+            ).fetchone()[0]
+        self.add_pet(owner_id)
+        self.add_veterinarian()
+        with closing(sqlite3.connect(veterinary_app.DATABASE)) as connection:
+            pet_id = connection.execute("SELECT id FROM pets").fetchone()[0]
+            veterinarian_id = connection.execute(
+                "SELECT id FROM veterinarians"
+            ).fetchone()[0]
+            service_id = connection.execute(
+                "SELECT id FROM services WHERE name = 'Vacunación'"
+            ).fetchone()[0]
+            cursor = connection.execute(
+                """
+                INSERT INTO appointments
+                    (owner_id, pet_id, veterinarian_id, appointment_date, time_block)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (owner_id, pet_id, veterinarian_id, date.today().isoformat(), "09:00-10:00"),
+            )
+            appointment_id = cursor.lastrowid
+            connection.commit()
+
+        saved = self.client.post(
+            "/procedures/new",
+            data={
+                "appointment_id": str(appointment_id),
+                "service_id": str(service_id),
+                "performed_date": date.today().isoformat(),
+                "charged_price": "45",
+            },
+            follow_redirects=True,
+        )
+        self.assertIn("Vacunación", saved.get_data(as_text=True))
+        self.assertIn("Luna", saved.get_data(as_text=True))
+        with closing(sqlite3.connect(veterinary_app.DATABASE)) as connection:
+            status = connection.execute(
+                "SELECT status FROM appointments WHERE id = ?", (appointment_id,)
+            ).fetchone()[0]
+            linked_appointment_id = connection.execute(
+                "SELECT appointment_id FROM procedure_records"
+            ).fetchone()[0]
+        self.assertEqual(status, "Completada")
+        self.assertEqual(linked_appointment_id, appointment_id)
 
 
 if __name__ == "__main__":

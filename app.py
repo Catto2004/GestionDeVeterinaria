@@ -41,6 +41,13 @@ TIME_BLOCKS = (
     "15:00-16:00",
     "16:00-17:00",
 )
+PRODUCT_CATEGORIES = ("Medicamentos", "Alimentos", "Juguetes")
+DEFAULT_PROCEDURES = (
+    "Consulta general",
+    "Vacunación",
+    "Desparasitación",
+    "Cirugía",
+)
 
 LAYOUT = """
 <!doctype html>
@@ -62,6 +69,10 @@ LAYOUT = """
             <a href="{{ url_for('appointments') }}">Consultar citas</a> |
             <a href="{{ url_for('veterinarians') }}">Veterinarios</a> |
             <a href="{{ url_for('prescriptions') }}">Recetas</a> |
+            <a href="{{ url_for('inventory') }}">Inventario</a> |
+            <a href="{{ url_for('procedure_catalog') }}">Procedimientos</a> |
+            <a href="{{ url_for('new_procedure_record') }}">Registrar atención</a> |
+            <a href="{{ url_for('procedure_history') }}">Historial de procedimientos</a> |
             {% if session.get('veterinarian_id') %}
                 <a href="{{ url_for('logout') }}">Cerrar sesión ({{ session.get('veterinarian_name') }})</a>
             {% else %}
@@ -164,7 +175,53 @@ def init_db():
                 FOREIGN KEY (pet_id) REFERENCES pets (id),
                 FOREIGN KEY (veterinarian_id) REFERENCES veterinarians (id)
             );
+
+            CREATE TABLE IF NOT EXISTS products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                category TEXT NOT NULL CHECK (
+                    category IN ('Medicamentos', 'Alimentos', 'Juguetes')
+                ),
+                stock INTEGER NOT NULL CHECK (stock >= 0),
+                unit_price REAL NOT NULL CHECK (unit_price >= 0)
+            );
+
+            CREATE TABLE IF NOT EXISTS services (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                fixed_price REAL CHECK (fixed_price IS NULL OR fixed_price >= 0)
+            );
+
+            CREATE TABLE IF NOT EXISTS procedure_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pet_id INTEGER NOT NULL,
+                veterinarian_id INTEGER NOT NULL,
+                service_id INTEGER NOT NULL,
+                appointment_id INTEGER,
+                performed_date TEXT NOT NULL,
+                charged_price REAL NOT NULL CHECK (charged_price >= 0),
+                notes TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY (pet_id) REFERENCES pets (id),
+                FOREIGN KEY (veterinarian_id) REFERENCES veterinarians (id),
+                FOREIGN KEY (service_id) REFERENCES services (id),
+                FOREIGN KEY (appointment_id) REFERENCES appointments (id)
+            );
+
+            CREATE TABLE IF NOT EXISTS procedure_products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                procedure_record_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                quantity INTEGER NOT NULL CHECK (quantity > 0),
+                unit_price REAL NOT NULL CHECK (unit_price >= 0),
+                FOREIGN KEY (procedure_record_id) REFERENCES procedure_records (id),
+                FOREIGN KEY (product_id) REFERENCES products (id),
+                UNIQUE (procedure_record_id, product_id)
+            );
             """
+        )
+        connection.executemany(
+            "INSERT OR IGNORE INTO services (name, fixed_price) VALUES (?, NULL)",
+            ((name,) for name in DEFAULT_PROCEDURES),
         )
         pet_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(pets)")
@@ -251,6 +308,10 @@ def index():
             <li><a href="{{ url_for('veterinarians') }}">Registrar veterinario</a></li>
             <li><a href="{{ url_for('prescriptions') }}">Consultar recetas</a></li>
             <li><a href="{{ url_for('register_veterinarian_account') }}">Crear cuenta veterinaria</a></li>
+            <li><a href="{{ url_for('inventory') }}">Inventario de insumos</a></li>
+            <li><a href="{{ url_for('procedure_catalog') }}">Catálogo de procedimientos</a></li>
+            <li><a href="{{ url_for('new_procedure_record') }}">Registrar procedimiento realizado</a></li>
+            <li><a href="{{ url_for('procedure_history') }}">Historial de procedimientos</a></li>
         </ul>
         """,
     )
@@ -425,7 +486,7 @@ def pets():
         {% if not owners %}<p>No hay dueños que coincidan. Registra un dueño o cambia la búsqueda.</p>{% endif %}
         <h3>Mascotas registradas</h3>
         {% if pets %}
-            <ul>{% for pet in pets %}<li>{{ pet.name }} ({{ pet.species }}, {{ pet.breed }}) — dueño: {{ pet.owner_name }}{% if session.get('veterinarian_id') %} — <a href="{{ url_for('medical_records', pet_id=pet.id) }}">Historia clínica</a> — <a href="{{ url_for('new_prescription') }}">Nueva receta</a>{% endif %}</li>{% endfor %}</ul>
+            <ul>{% for pet in pets %}<li>{{ pet.name }} ({{ pet.species }}, {{ pet.breed }}) — dueño: {{ pet.owner_name }} — <a href="{{ url_for('new_procedure_record', pet_id=pet.id) }}">Registrar procedimiento</a>{% if session.get('veterinarian_id') %} — <a href="{{ url_for('medical_records', pet_id=pet.id) }}">Historia clínica</a> — <a href="{{ url_for('new_prescription') }}">Nueva receta</a>{% endif %}</li>{% endfor %}</ul>
         {% else %}<p>No hay mascotas registradas.</p>{% endif %}
         """,
         error=error,
@@ -434,6 +495,554 @@ def pets():
         pets=pet_list,
         request=request,
         search=search,
+    )
+
+
+@app.route("/inventory", methods=["GET", "POST"])
+def inventory():
+    error = None
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        category = request.form.get("category", "")
+        stock_value = request.form.get("stock", "").strip()
+        price_value = request.form.get("unit_price", "").strip()
+        try:
+            stock = int(stock_value)
+            unit_price = float(price_value)
+        except ValueError:
+            stock = -1
+            unit_price = -1
+        if not name:
+            error = "El nombre del producto es obligatorio."
+        elif category not in PRODUCT_CATEGORIES:
+            error = "Selecciona una categoría válida."
+        elif stock < 0:
+            error = "El stock debe ser un entero igual o mayor que cero."
+        elif not isfinite(unit_price) or unit_price < 0:
+            error = "El precio debe ser un número válido igual o mayor que cero."
+        else:
+            try:
+                with closing(get_db()) as connection:
+                    connection.execute(
+                        """
+                        INSERT INTO products (name, category, stock, unit_price)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (name, category, stock, unit_price),
+                    )
+                    connection.commit()
+                return redirect(
+                    url_for("inventory", message="Producto agregado al inventario.")
+                )
+            except sqlite3.IntegrityError:
+                error = "Ya existe un producto con ese nombre."
+
+    with closing(get_db()) as connection:
+        product_list = connection.execute(
+            "SELECT id, name, category, stock, unit_price FROM products ORDER BY category, name"
+        ).fetchall()
+    return render_page(
+        "Inventario de insumos",
+        """
+        {% if message %}<p>{{ message }}</p>{% endif %}
+        {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+        <form method="post">
+            <label>Nombre: <input name="name" required value="{{ request.form.get('name', '') }}"></label><br>
+            <label>Categoría:
+                <select name="category" required>
+                    <option value="">Selecciona</option>
+                    {% for category in categories %}<option value="{{ category }}">{{ category }}</option>{% endfor %}
+                </select>
+            </label><br>
+            <label>Stock inicial: <input name="stock" type="number" min="0" step="1" required></label><br>
+            <label>Precio unitario: <input name="unit_price" type="number" min="0" step="0.01" required></label><br>
+            <button type="submit">Agregar producto</button>
+        </form>
+        <h3>Productos</h3>
+        <table>
+            <thead><tr><th>Nombre</th><th>Categoría</th><th>Stock actual</th><th>Precio unitario</th><th>Reposición</th></tr></thead>
+            <tbody>
+            {% for product in products %}
+                <tr {% if product.category == 'Medicamentos' and product.stock < 5 %}style="background-color: #fff3cd;"{% endif %}>
+                    <td>{{ product.name }}</td>
+                    <td>{{ product.category }}</td>
+                    <td>{{ product.stock }}
+                        {% if product.category == 'Medicamentos' and product.stock < 5 %}
+                            <strong role="alert">Stock bajo: menos de 5 unidades</strong>
+                        {% endif %}
+                    </td>
+                    <td>{{ "%.2f"|format(product.unit_price) }}</td>
+                    <td>
+                        <form method="post" action="{{ url_for('restock_product', product_id=product.id) }}">
+                            <label>Cantidad: <input name="quantity" type="number" min="1" step="1" required></label>
+                            <button type="submit">Reponer</button>
+                        </form>
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="5">No hay productos registrados.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        """,
+        message=request.args.get("message"),
+        error=error,
+        categories=PRODUCT_CATEGORIES,
+        products=product_list,
+        request=request,
+    )
+
+
+@app.route("/inventory/<int:product_id>/restock", methods=["POST"])
+def restock_product(product_id):
+    try:
+        quantity = int(request.form.get("quantity", ""))
+    except ValueError:
+        quantity = 0
+    if quantity <= 0:
+        abort(400, description="La cantidad de reposición debe ser mayor que cero.")
+    with closing(get_db()) as connection:
+        cursor = connection.execute(
+            "UPDATE products SET stock = stock + ? WHERE id = ?",
+            (quantity, product_id),
+        )
+        if not cursor.rowcount:
+            abort(404)
+        connection.commit()
+    return redirect(url_for("inventory", message="Stock actualizado."))
+
+
+@app.route("/procedures", methods=["GET", "POST"])
+def procedure_catalog():
+    error = None
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        price_value = request.form.get("fixed_price", "").strip()
+        fixed_price = None
+        if price_value:
+            try:
+                fixed_price = float(price_value)
+            except ValueError:
+                fixed_price = -1
+        if not name:
+            error = "El nombre del procedimiento es obligatorio."
+        elif fixed_price is not None and (
+            not isfinite(fixed_price) or fixed_price < 0
+        ):
+            error = "El precio fijo debe ser un número válido igual o mayor que cero."
+        else:
+            try:
+                with closing(get_db()) as connection:
+                    connection.execute(
+                        "INSERT INTO services (name, fixed_price) VALUES (?, ?)",
+                        (name, fixed_price),
+                    )
+                    connection.commit()
+                return redirect(
+                    url_for("procedure_catalog", message="Procedimiento agregado al catálogo.")
+                )
+            except sqlite3.IntegrityError:
+                error = "Ya existe un procedimiento con ese nombre."
+
+    with closing(get_db()) as connection:
+        service_list = connection.execute(
+            "SELECT id, name, fixed_price FROM services ORDER BY name"
+        ).fetchall()
+    return render_page(
+        "Catálogo de procedimientos",
+        """
+        {% if message %}<p>{{ message }}</p>{% endif %}
+        {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+        <form method="post">
+            <label>Nombre del procedimiento: <input name="name" required></label><br>
+            <label>Precio fijo (déjalo vacío si es variable):
+                <input name="fixed_price" type="number" min="0" step="0.01">
+            </label><br>
+            <button type="submit">Agregar procedimiento</button>
+        </form>
+        <h3>Servicios disponibles</h3>
+        <ul>
+        {% for service in services %}
+            <li>{{ service.name }} — {% if service.fixed_price is none %}Tarifa variable{% else %}${{ "%.2f"|format(service.fixed_price) }}{% endif %}</li>
+        {% else %}<li>No hay procedimientos en el catálogo.</li>{% endfor %}
+        </ul>
+        <p><a href="{{ url_for('new_procedure_record') }}">Registrar atención realizada</a></p>
+        """,
+        message=request.args.get("message"),
+        error=error,
+        services=service_list,
+    )
+
+
+@app.route("/procedures/new", methods=["GET", "POST"])
+def new_procedure_record():
+    error = None
+    usage = {}
+    product_values = request.form.getlist("product_id")
+    quantity_values = request.form.getlist("quantity")
+    if len(product_values) != len(quantity_values):
+        error = "Revisa las cantidades de insumos seleccionadas."
+    else:
+        for product_value, quantity_value in zip(product_values, quantity_values):
+            if not product_value and not quantity_value:
+                continue
+            try:
+                product_id = int(product_value)
+                quantity = int(quantity_value)
+            except ValueError:
+                error = "Selecciona un insumo y una cantidad entera válida."
+                break
+            if product_id <= 0 or quantity <= 0:
+                error = "La cantidad utilizada debe ser mayor que cero."
+                break
+            usage[product_id] = usage.get(product_id, 0) + quantity
+
+    pet_id = request.form.get("pet_id", "")
+    veterinarian_id = request.form.get("veterinarian_id", "")
+    service_id = request.form.get("service_id", "")
+    appointment_id = request.form.get("appointment_id", "").strip()
+    performed_date = request.form.get("performed_date", date.today().isoformat())
+    try:
+        parsed_date = date.fromisoformat(performed_date)
+    except ValueError:
+        parsed_date = None
+    if request.method == "POST" and parsed_date is None:
+        error = "Ingresa una fecha válida para la atención."
+    elif (
+        request.method == "POST"
+        and parsed_date is not None
+        and parsed_date > date.today()
+    ):
+        error = "La fecha de atención no puede estar en el futuro."
+    notes = request.form.get("notes", "").strip()
+
+    with closing(get_db()) as connection:
+        services = connection.execute(
+            "SELECT id, name, fixed_price FROM services ORDER BY name"
+        ).fetchall()
+        pets = connection.execute(
+            """
+            SELECT pets.id, pets.name, owners.name AS owner_name
+            FROM pets JOIN owners ON owners.id = pets.owner_id
+            ORDER BY owners.name, pets.name
+            """
+        ).fetchall()
+        veterinarians = connection.execute(
+            "SELECT id, name FROM veterinarians ORDER BY name"
+        ).fetchall()
+        products = connection.execute(
+            "SELECT id, name, category, stock FROM products ORDER BY name"
+        ).fetchall()
+        appointments = connection.execute(
+            """
+            SELECT appointments.id, appointments.appointment_date, appointments.time_block,
+                   pets.name AS pet_name, owners.name AS owner_name,
+                   veterinarians.name AS veterinarian_name
+            FROM appointments
+            JOIN pets ON pets.id = appointments.pet_id
+            JOIN owners ON owners.id = appointments.owner_id
+            JOIN veterinarians ON veterinarians.id = appointments.veterinarian_id
+            WHERE appointments.status = 'Programada'
+                AND appointments.appointment_date >= ?
+            ORDER BY appointments.appointment_date, appointments.time_block
+            """,
+            (date.today().isoformat(),),
+        ).fetchall()
+
+        if request.method == "POST" and not error:
+            connection.execute("BEGIN IMMEDIATE")
+            service = connection.execute(
+                "SELECT id, fixed_price FROM services WHERE id = ?", (service_id,)
+            ).fetchone()
+            appointment = None
+            if appointment_id:
+                appointment = connection.execute(
+                    """
+                    SELECT id, pet_id, veterinarian_id, appointment_date, time_block
+                    FROM appointments WHERE id = ? AND status = 'Programada'
+                    """,
+                    (appointment_id,),
+                ).fetchone()
+                if not appointment:
+                    error = "La cita seleccionada ya no está programada."
+                elif appointment["appointment_date"] > performed_date:
+                    error = "No se puede registrar una atención antes de la fecha de la cita."
+                else:
+                    appointment_date_value = date.fromisoformat(
+                        appointment["appointment_date"]
+                    )
+                    if (
+                        appointment_date_value == date.today()
+                        and not slot_is_in_the_past(
+                            appointment_date_value, appointment["time_block"]
+                        )
+                    ):
+                        error = "La hora de la cita todavía no ha llegado."
+                    pet_id = appointment["pet_id"]
+                    veterinarian_id = appointment["veterinarian_id"]
+
+            if not service:
+                error = "Selecciona un procedimiento del catálogo."
+
+            if not appointment_id:
+                pet = connection.execute(
+                    "SELECT id FROM pets WHERE id = ?", (pet_id,)
+                ).fetchone()
+                veterinarian = connection.execute(
+                    "SELECT id FROM veterinarians WHERE id = ?", (veterinarian_id,)
+                ).fetchone()
+                if not pet:
+                    error = "Selecciona una mascota registrada."
+                elif not veterinarian:
+                    error = "Selecciona un veterinario registrado."
+
+            used_products = []
+            if not error:
+                for used_product_id, quantity in usage.items():
+                    product = connection.execute(
+                        "SELECT id, name, stock, unit_price FROM products WHERE id = ?",
+                        (used_product_id,),
+                    ).fetchone()
+                    if not product:
+                        error = "Uno de los insumos seleccionados ya no existe."
+                        break
+                    if product["stock"] < quantity:
+                        error = (
+                            f"Stock insuficiente para {product['name']}: "
+                            f"disponibles {product['stock']}, solicitadas {quantity}."
+                        )
+                        break
+                    used_products.append((product, quantity))
+
+            charged_price = 0.0
+            if service:
+                if service["fixed_price"] is not None:
+                    charged_price = service["fixed_price"]
+                else:
+                    try:
+                        charged_price = float(request.form.get("charged_price", ""))
+                    except ValueError:
+                        charged_price = -1
+                    if not isfinite(charged_price) or charged_price < 0:
+                        error = "Ingresa un precio válido igual o mayor que cero."
+
+            if error:
+                connection.rollback()
+            else:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO procedure_records
+                        (pet_id, veterinarian_id, service_id, appointment_id,
+                         performed_date, charged_price, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        pet_id,
+                        veterinarian_id,
+                        service["id"],
+                        appointment["id"] if appointment else None,
+                        performed_date,
+                        charged_price,
+                        notes,
+                    ),
+                )
+                procedure_record_id = cursor.lastrowid
+                for product, quantity in used_products:
+                    stock_update = connection.execute(
+                        "UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?",
+                        (quantity, product["id"], quantity),
+                    )
+                    if not stock_update.rowcount:
+                        error = f"No se pudo descontar el stock de {product['name']}."
+                        break
+                    connection.execute(
+                        """
+                        INSERT INTO procedure_products
+                            (procedure_record_id, product_id, quantity, unit_price)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (procedure_record_id, product["id"], quantity, product["unit_price"]),
+                    )
+                if error:
+                    connection.rollback()
+                else:
+                    if appointment:
+                        connection.execute(
+                            "UPDATE appointments SET status = 'Completada' WHERE id = ?",
+                            (appointment["id"],),
+                        )
+                    connection.commit()
+                    return redirect(
+                        url_for(
+                            "procedure_history",
+                            pet_id=pet_id,
+                            message="Atención registrada e inventario actualizado.",
+                        )
+                    )
+
+    return render_page(
+        "Registrar procedimiento realizado",
+        """
+        {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+        <p>Asociar una cita completará esa cita y usará su mascota y veterinario.</p>
+        <form method="post">
+            <label>Cita programada (opcional):
+                <select name="appointment_id">
+                    <option value="">Sin cita asociada</option>
+                    {% for appointment in appointments %}
+                    <option value="{{ appointment.id }}" {% if request.form.get('appointment_id') == appointment.id|string %}selected{% endif %}>
+                        {{ appointment.appointment_date }} {{ appointment.time_block }} — {{ appointment.owner_name }} / {{ appointment.pet_name }} — {{ appointment.veterinarian_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label><br>
+            <label>Mascota:
+                <select name="pet_id" required>
+                    <option value="">Selecciona una mascota</option>
+                    {% for pet in pets %}
+                    <option value="{{ pet.id }}" {% if request.form.get('pet_id', selected_pet) == pet.id|string %}selected{% endif %}>{{ pet.owner_name }} — {{ pet.name }}</option>
+                    {% endfor %}
+                </select>
+            </label><br>
+            <label>Veterinario:
+                <select name="veterinarian_id" required>
+                    <option value="">Selecciona un veterinario</option>
+                    {% for vet in veterinarians %}
+                    <option value="{{ vet.id }}" {% if request.form.get('veterinarian_id') == vet.id|string %}selected{% endif %}>{{ vet.name }}</option>
+                    {% endfor %}
+                </select>
+            </label><br>
+            <label>Procedimiento:
+                <select name="service_id" id="service_id" required>
+                    <option value="">Selecciona un procedimiento</option>
+                    {% for service in services %}
+                    <option value="{{ service.id }}" data-fixed="{% if service.fixed_price is not none %}{{ service.fixed_price }}{% endif %}" {% if request.form.get('service_id') == service.id|string %}selected{% endif %}>{{ service.name }}{% if service.fixed_price is none %} — tarifa variable{% endif %}</option>
+                    {% endfor %}
+                </select>
+            </label><br>
+            <label>Fecha de atención: <input type="date" name="performed_date" max="{{ today }}" value="{{ request.form.get('performed_date', today) }}" required></label><br>
+            <label>Valor cobrado: <input id="charged_price" name="charged_price" type="number" min="0" step="0.01" value="{{ request.form.get('charged_price', '') }}"></label><br>
+            <label>Notas: <textarea name="notes">{{ request.form.get('notes', '') }}</textarea></label>
+            <h3>Insumos utilizados</h3>
+            <div id="product-rows">
+                <div class="product-row">
+                    <select name="product_id">
+                        <option value="">Sin insumo</option>
+                        {% for product in products %}<option value="{{ product.id }}">{{ product.name }} (stock {{ product.stock }})</option>{% endfor %}
+                    </select>
+                    <label>Cantidad: <input name="quantity" type="number" min="1" step="1"></label>
+                </div>
+            </div>
+            <template id="product-row-template">
+                <div class="product-row">
+                    <select name="product_id">
+                        <option value="">Sin insumo</option>
+                        {% for product in products %}<option value="{{ product.id }}">{{ product.name }} (stock {{ product.stock }})</option>{% endfor %}
+                    </select>
+                    <label>Cantidad: <input name="quantity" type="number" min="1" step="1"></label>
+                </div>
+            </template>
+            <button type="button" id="add-product">Agregar otro insumo</button><br>
+            <button type="submit" {% if not pets or not veterinarians or not services %}disabled{% endif %}>Guardar atención y descontar insumos</button>
+        </form>
+        <script>
+        const serviceSelect = document.getElementById('service_id');
+        const priceInput = document.getElementById('charged_price');
+        const appointmentSelect = document.querySelector('[name="appointment_id"]');
+        const petSelect = document.querySelector('[name="pet_id"]');
+        const veterinarianSelect = document.querySelector('[name="veterinarian_id"]');
+        function updateServicePrice() {
+            const option = serviceSelect.selectedOptions[0];
+            const fixedPrice = option ? option.dataset.fixed : '';
+            const isVariable = fixedPrice === '';
+            priceInput.readOnly = !isVariable;
+            priceInput.required = isVariable && serviceSelect.value !== '';
+            if (!isVariable) priceInput.value = fixedPrice;
+        }
+        function updateAppointmentSelection() {
+            const appointmentSelected = appointmentSelect.value !== '';
+            petSelect.required = !appointmentSelected;
+            veterinarianSelect.required = !appointmentSelected;
+            petSelect.disabled = appointmentSelected;
+            veterinarianSelect.disabled = appointmentSelected;
+        }
+        serviceSelect.addEventListener('change', () => {
+            const option = serviceSelect.selectedOptions[0];
+            if (option && option.dataset.fixed === '') priceInput.value = '';
+            updateServicePrice();
+        });
+        appointmentSelect.addEventListener('change', updateAppointmentSelection);
+        updateServicePrice();
+        updateAppointmentSelection();
+        document.getElementById('add-product').addEventListener('click', () => {
+            document.getElementById('product-rows').append(
+                document.getElementById('product-row-template').content.cloneNode(true)
+            );
+        });
+        </script>
+        """,
+        error=error,
+        services=services,
+        pets=pets,
+        veterinarians=veterinarians,
+        products=products,
+        appointments=appointments,
+        today=date.today().isoformat(),
+        selected_pet=request.args.get("pet_id", ""),
+        request=request,
+    )
+
+
+@app.route("/procedure-history")
+def procedure_history():
+    pet_id = request.args.get("pet_id", "").strip()
+    with closing(get_db()) as connection:
+        history = connection.execute(
+            """
+            SELECT procedure_records.id, procedure_records.pet_id,
+                   procedure_records.performed_date, procedure_records.charged_price,
+                   procedure_records.notes, pets.name AS pet_name,
+                   veterinarians.name AS veterinarian_name, services.name AS service_name,
+                   GROUP_CONCAT(products.name || ' x' || procedure_products.quantity, ', ')
+                       AS used_products
+            FROM procedure_records
+            JOIN pets ON pets.id = procedure_records.pet_id
+            JOIN veterinarians ON veterinarians.id = procedure_records.veterinarian_id
+            JOIN services ON services.id = procedure_records.service_id
+            LEFT JOIN procedure_products
+                ON procedure_products.procedure_record_id = procedure_records.id
+            LEFT JOIN products ON products.id = procedure_products.product_id
+            WHERE (? = '' OR procedure_records.pet_id = ?)
+            GROUP BY procedure_records.id
+            ORDER BY procedure_records.performed_date DESC, procedure_records.id DESC
+            """,
+            (pet_id, pet_id),
+        ).fetchall()
+    return render_page(
+        "Historial de procedimientos",
+        """
+        {% if message %}<p>{{ message }}</p>{% endif %}
+        {% if history %}
+            <table>
+                <thead><tr><th>Fecha</th><th>Mascota</th><th>Procedimiento</th><th>Veterinario</th><th>Valor cobrado</th><th>Insumos usados</th><th>Notas</th></tr></thead>
+                <tbody>
+                {% for record in history %}
+                    <tr>
+                        <td>{{ record.performed_date }}</td>
+                        <td>{{ record.pet_name }}</td>
+                        <td>{{ record.service_name }}</td>
+                        <td>{{ record.veterinarian_name }}</td>
+                        <td>{{ "%.2f"|format(record.charged_price) }}</td>
+                        <td>{{ record.used_products or 'Ninguno' }}</td>
+                        <td>{{ record.notes or '—' }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}<p>No hay procedimientos registrados.</p>{% endif %}
+        """,
+        message=request.args.get("message"),
+        history=history,
     )
 
 
@@ -1098,6 +1707,25 @@ def medical_records(pet_id):
             """,
             (pet_id,),
         ).fetchall()
+        procedure_history = connection.execute(
+            """
+            SELECT procedure_records.performed_date, procedure_records.charged_price,
+                   procedure_records.notes, services.name AS service_name,
+                   veterinarians.name AS veterinarian_name,
+                   GROUP_CONCAT(products.name || ' x' || procedure_products.quantity, ', ')
+                       AS used_products
+            FROM procedure_records
+            JOIN veterinarians ON veterinarians.id = procedure_records.veterinarian_id
+            JOIN services ON services.id = procedure_records.service_id
+            LEFT JOIN procedure_products
+                ON procedure_products.procedure_record_id = procedure_records.id
+            LEFT JOIN products ON products.id = procedure_products.product_id
+            WHERE procedure_records.pet_id = ?
+            GROUP BY procedure_records.id
+            ORDER BY procedure_records.performed_date DESC, procedure_records.id DESC
+            """,
+            (pet_id,),
+        ).fetchall()
     return render_page(
         f"Historia clínica de {pet['name']}",
         """
@@ -1132,9 +1760,22 @@ def medical_records(pet_id):
             {% endfor %}
             </ul>
         {% else %}<p>La mascota aún no tiene notas clínicas.</p>{% endif %}
+        <h3>Procedimientos realizados</h3>
+        {% if procedures %}
+            <ul>
+            {% for procedure in procedures %}
+                <li>{{ procedure.performed_date }} — {{ procedure.service_name }},
+                    {{ procedure.veterinarian_name }}, valor:
+                    {{ "%.2f"|format(procedure.charged_price) }},
+                    insumos: {{ procedure.used_products or 'ninguno' }}.
+                    {{ procedure.notes }}</li>
+            {% endfor %}
+            </ul>
+        {% else %}<p>No hay procedimientos registrados para esta mascota.</p>{% endif %}
         """,
         pet=pet,
         records=records,
+        procedures=procedure_history,
         error=error,
         message=request.args.get("message"),
         today=date.today().isoformat(),

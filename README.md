@@ -32,6 +32,20 @@ las citas programadas, ingresa el documento del dueño.
   Sin SMTP, la cita se guarda igualmente y se muestra una alerta.
 - Define `FLASK_SECRET_KEY` antes de usar las sesiones fuera de desarrollo.
 
+## Sprint 3
+
+- En `/inventory` registra medicamentos, alimentos y juguetes, consulta stock y
+  precio unitario, y registra reposiciones. Los medicamentos con menos de cinco
+  unidades aparecen resaltados.
+- `/procedures` muestra el catálogo inicial (consulta general, vacunación,
+  desparasitación y cirugía). Al crear un servicio, un precio vacío indica tarifa
+  variable; un precio informado queda fijo.
+- En `/procedures/new` registra la mascota, el veterinario, el servicio y el
+  valor cobrado. Indica los insumos usados para que el stock se descuente en la
+  misma transacción; si se asocia una cita programada, queda completada.
+- El historial queda disponible en `/procedure-history` y también aparece en
+  la historia clínica de la mascota.
+
 Para ejecutar las pruebas:
 
 ```bash
