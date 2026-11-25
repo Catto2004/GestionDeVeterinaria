@@ -4,29 +4,17 @@ REGLAS DE TRABAJO:
 1\. Genera código mínimo funcional para Flask (vistas sencillas en Jinja2/HTML plano, sqlite3 directo). 
 
 # Detalle HU:
-## HU 5 gestion de citas:
- como recepcionista me gustaria que la aplicacion tenga un gestor que me ayude a ver que horarios tienen disponibles los veterinarios para evitar malas asignaciones.
-CA 5.1 (Vista visual de agenda): La pantalla debe mostrar una grilla o calendario indicando los bloques de tiempo libres y ocupados por cada veterinario[2].
-CA 5.2 (Bloqueo de horas pasadas): El sistema no debe permitir seleccionar horas pasadas a la fecha/hora actual.
-CA 5.3 (Actualización): Al agendar o cancelar una cita, el bloque de horario debe cambiar de color (ej. Verde = Libre, Rojo = Ocupado) en tiempo real.
+## HU 8
+ como encargado me gustaria tener un inventario de todos lo elementos de la veterinaria, medicamentos, alimentos, juguetes etc.
+CA 8.1 (Tabla de insumos): Muestra una tabla con Nombre del producto, Categoría (Medicamentos, Alimentos, Juguetes), Stock actual y Precio unitario[2].
+CA 8.2 (Descuento automático de stock): Al finalizar una consulta médica o registrar un procedimiento donde se usen medicamentos e insumos, el sistema debe restar automáticamente la cantidad utilizada del inventario general[4].
+CA 8.3 (Alerta de stock mínimo): Muestra un aviso en amarillo si la cantidad de un medicamento es inferior a 5 unidades.
 
-## HU 6 historia clinica:
- Como veterinario me gustaria poder agregar a la historia clinica de cada paciente para poder tener un control mas detallado de el y hacerle seguimiento.
-CA 6.1 (Control de acceso): Solo los usuarios logueados con el rol de Veterinario pueden agregar o editar notas en la historia clínica[4].
-CA 6.2 (Registro médico): Permite ingresar Diagnóstico, Anamnesis, Observaciones y Fecha de atención.
-CA 6.3 (Alerta médica): Si la mascota tiene alergias o condiciones registradas, el sistema debe mostrar una etiqueta roja o aviso destacado en la parte superior de la historia clínica[4].
-
-## HU 7 recetas:
- como veterinatrio quiero poder emitir un receta medica a una mascota y que esta se pueda ver en recepcion para un correcto suministro de medicamentos.
-CA 7.1 (Redacción de receta): El veterinario puede prescribir medicamentos, indicando dosis y duración del tratamiento.
-CA 7.2 (Exportación a PDF): El sistema debe incluir un botón para descargar la receta en formato PDF mostrando el logo de la veterinaria y la firma digitalizada del médico[4].
-CA 7.3 (Visibilidad en recepción): La receta emitida debe ser consultable inmediatamente por la recepcionista para coordinar la entrega o despacho de medicamentos
-
-## HU 10 Notificaciones: 
-Yo como usuario me gustaria que el sistema me notificara por algun medio las citas programadas o cualquier informacion importante.
-CA 10.1 (Envío automático): Al confirmar una cita en el sistema, se debe enviar de forma automática un correo electrónico al cliente[4].
-CA 10.2 (Contenido del correo): El mensaje debe incluir: Nombre del cliente, Mascota, Fecha, Hora, Nombre del Veterinario y Recordatorio de llegar 10 minutos antes[4].
-CA 10.3 (Manejo de errores): Si el correo falla al enviarse, la cita de todos modos se guarda correctamente en la base de datos y se notifica la alerta al usuario.
+## HU 9:
+Como encargado me gustaria tener un registro de todos los procedimientos y elementos de la veterinaria. como no todos los procedimientos tienen un valor fijo este lo asignara el recepcionista.
+CA 9.1 (Catálogo de procedimientos): Listado de servicios (ej. Consulta general, Vacunación, Desparasitación, Cirugía).
+CA 9.2 (Tarifas variables): En procedimientos con precio no fijo, el sistema debe habilitar un campo editable para que la recepcionista ingrese el monto cobrado[2].
+CA 9.3 (Historial): El procedimiento ejecutado debe quedar registrado en la atención del paciente.
 
 3\. Al final de cada archivo o función que me entregues, ve paso a paso si consideras que sea necesaruio, dame SIEMPRE el comando exacto para hacer el commit en Git con el formato de trazabilidad:
 
