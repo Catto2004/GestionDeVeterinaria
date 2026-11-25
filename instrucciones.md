@@ -2,38 +2,31 @@ Actúa como desarrollador Python/Flask para un proyecto universitario de softwar
 El enfoque principal del proyecto es la DOCUMENTACIÓN y la TRAZABILIDAD, por lo que el código debe ser lo más SENCILLO y DIRECTO posible (sin arquitecturas complejas, sin estilos avanzados, código en 1 o 2 archivos con Flask y SQLite).
 REGLAS DE TRABAJO: 
 1\. Genera código mínimo funcional para Flask (vistas sencillas en Jinja2/HTML plano, sqlite3 directo). 
-2\. Desarrolla las funciones básicas según las tarjetas de Jira: 
-- Registro de Dueños (HU-1) 
-- Ficha de Mascotas (HU-2) 
-- Agendamiento de Citas con validación de horario no duplicado (HU-3) 
-- Consulta de Citas (HU-4) 
 
 # Detalle HU:
-## - HU 1 (Registro dueños) 
-como recepcionista deseo ingresar los datos de cada duelo de una o varias mascotas, donde contenga su informacion fundmental como nombre, telefono, direccion y un correo.
-### Criterios de Aceptación:
-- CA 1.1 (Campos obligatorios): El formulario debe requerir obligatoriamente: Nombre completo, Teléfono, Dirección y Correo electrónico.
-- CA 1.2 (Validación básica): El campo de correo debe validar que tenga formato correcto (ejemplo: usuario@dominio.com) y el teléfono debe aceptar solo números.
+## HU 5 gestion de citas:
+ como recepcionista me gustaria que la aplicacion tenga un gestor que me ayude a ver que horarios tienen disponibles los veterinarios para evitar malas asignaciones.
+CA 5.1 (Vista visual de agenda): La pantalla debe mostrar una grilla o calendario indicando los bloques de tiempo libres y ocupados por cada veterinario[2].
+CA 5.2 (Bloqueo de horas pasadas): El sistema no debe permitir seleccionar horas pasadas a la fecha/hora actual.
+CA 5.3 (Actualización): Al agendar o cancelar una cita, el bloque de horario debe cambiar de color (ej. Verde = Libre, Rojo = Ocupado) en tiempo real.
 
-## - HU 2 (registro mascotas) 
-como recepcionista de mascotas quiero tener la ficha de cada una donde tenga su nombre, especie, raza, edad, peso y una descripcion de la mascota
-### Criterios de Aceptación:
-- CA 2.1 (Registro de datos): Debe permitir registrar Nombre, Especie (ej. Perro, Gato), Raza, Edad, Peso y una Descripción opcional[1].
-- CA 2.2 (Vinculación con dueño): Permite seleccionar y asociar a la mascota con un dueño previamente registrado (búsqueda por número de documento o nombre)
+## HU 6 historia clinica:
+ Como veterinario me gustaria poder agregar a la historia clinica de cada paciente para poder tener un control mas detallado de el y hacerle seguimiento.
+CA 6.1 (Control de acceso): Solo los usuarios logueados con el rol de Veterinario pueden agregar o editar notas en la historia clínica[4].
+CA 6.2 (Registro médico): Permite ingresar Diagnóstico, Anamnesis, Observaciones y Fecha de atención.
+CA 6.3 (Alerta médica): Si la mascota tiene alergias o condiciones registradas, el sistema debe mostrar una etiqueta roja o aviso destacado en la parte superior de la historia clínica[4].
 
-## - HU 3 (Citas) 
-yo como recepcionista deseo asignarle una cita a un dueño con alguno de los veterinarios que tengan disponible en ese momento
-### Criterios de Aceptación:
-- CA 3.1 (Formulario de reserva): Debe permitir seleccionar Dueño/Mascota, Veterinario, Fecha y Bloque de horario.
-- CA 3.2 (Validación de no colisión): El sistema debe bloquear la asignación e impedir guardar si el veterinario seleccionado ya tiene una cita a esa misma hora[4].
-- CA 3.3 (Estado): La cita creada debe guardarse inicialmente en estado Programada.
+## HU 7 recetas:
+ como veterinatrio quiero poder emitir un receta medica a una mascota y que esta se pueda ver en recepcion para un correcto suministro de medicamentos.
+CA 7.1 (Redacción de receta): El veterinario puede prescribir medicamentos, indicando dosis y duración del tratamiento.
+CA 7.2 (Exportación a PDF): El sistema debe incluir un botón para descargar la receta en formato PDF mostrando el logo de la veterinaria y la firma digitalizada del médico[4].
+CA 7.3 (Visibilidad en recepción): La receta emitida debe ser consultable inmediatamente por la recepcionista para coordinar la entrega o despacho de medicamentos
 
-## - HU 4 citas: 
-yo como dueño de una o mas mascotas quiero poder ver informacion de la cita fecha, hora y veterinario
-### Criterios de Aceptación:
-- CA 4.1 (Vista de cliente): El cliente puede ver el listado de sus citas agendadas desde su vista pública o panel.
-- CA 4.2 (Detalle visible): Cada cita debe mostrar claramente: Fecha, Hora, Nombre de la Mascota y Veterinario asignado[2].
-- CA 4.3 (Sin registros): Si el cliente no tiene citas pendientes, debe mostrarse el mensaje "No registra citas programadas".
+## HU 10 Notificaciones: 
+Yo como usuario me gustaria que el sistema me notificara por algun medio las citas programadas o cualquier informacion importante.
+CA 10.1 (Envío automático): Al confirmar una cita en el sistema, se debe enviar de forma automática un correo electrónico al cliente[4].
+CA 10.2 (Contenido del correo): El mensaje debe incluir: Nombre del cliente, Mascota, Fecha, Hora, Nombre del Veterinario y Recordatorio de llegar 10 minutos antes[4].
+CA 10.3 (Manejo de errores): Si el correo falla al enviarse, la cita de todos modos se guarda correctamente en la base de datos y se notifica la alerta al usuario.
 
 3\. Al final de cada archivo o función que me entregues, ve paso a paso si consideras que sea necesaruio, dame SIEMPRE el comando exacto para hacer el commit en Git con el formato de trazabilidad:
 
